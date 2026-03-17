@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Reply Assistant</title>
+  <!-- Office.js MUST be loaded from Microsoft's CDN -->
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    /* ── Reset & tokens ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d0f1a;
+      --surf:     #161826;
+      --surf2:    #1e2235;
+      --border:   #2a2f4a;
+      --blue:     #0078d4;
+      --indigo:   #6b48ff;
+      --grad:     linear-gradient(135deg, #0078d4 0%, #6b48ff 100%);
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --text:     #e8eaf6;
+      --muted:    #6b7280;
+      --muted2:   #3d4260;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+
+    /* ── Header ─────────────────────────────────────────────────── */
+    .hdr {
+      background: var(--grad);
+      padding: 12px 14px 11px;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .hdr::after {
+      content: '';
+      position: absolute; top: -24px; right: -24px;
+      width: 80px; height: 80px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 50%; pointer-events: none;
+    }
+    .hdr-inner {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      position: relative; z-index: 1;
+    }
+    .brand { display: flex; align-items: center; gap: 8px; }
+    .brand-ico {
+      width: 26px; height: 26px;
+      background: rgba(255,255,255,0.18);
+      border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .brand-name {
+      font-family: 'Syne', sans-serif; font-weight: 800;
+      font-size: 13px; color: #fff; letter-spacing: -0.01em;
+    }
+    .brand-sub { font-size: 9px; color: rgba(255,255,255,0.55); margin-top: 1px; }
+
+    /* Toggle */
+    .tog-wrap { display: flex; align-items: center; gap: 6px; }
+    .tog-lbl {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: 0.1em; text-transform: uppercase;
+      color: rgba(255,255,255,0.7); min-width: 20px; text-align: right;
+    }
+    .tog { position: relative; width: 36px; height: 20px; cursor: pointer; }
+    .tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .tog-track {
+      position: absolute; inset: 0;
+      background: rgba(255,255,255,0.18);
+      border-radius: 10px; transition: background .22s;
+    }
+    .tog input:checked ~ .tog-track { background: rgba(255,255,255,0.42); }
+    .tog-thumb {
+      position: absolute; top: 2px; left: 2px;
+      width: 16px; height: 16px;
+      background: #fff; border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0,0,0,.3);
+      transition: transform .22s cubic-bezier(.34,1.56,.64,1);
+    }
+    .tog input:checked ~ .tog-thumb { transform: translateX(16px); }
+
+    /* ── Scrollable body ─────────────────────────────────────────── */
+    .body {
+      flex: 1; overflow-y: auto;
+      padding: 12px 13px 16px;
+      display: flex; flex-direction: column; gap: 11px;
+    }
+    .body::-webkit-scrollbar { width: 3px; }
+    .body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Micro label ─────────────────────────────────────────────── */
+    .lbl {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: .09em; text-transform: uppercase;
+      color: var(--muted2); margin-bottom: 5px;
+    }
+
+    /* ── Email preview card ──────────────────────────────────────── */
+    .email-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 8px; padding: 9px 11px;
+    }
+    .email-from {
+      font-size: 11px; font-weight: 600; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .email-subj {
+      font-size: 11px; color: var(--muted); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .email-snippet {
+      font-size: 10.5px; color: var(--muted2); margin-top: 6px;
+      line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+
+    /* ── Tone grid ───────────────────────────────────────────────── */
+    .tone-grid {
+      display: grid; grid-template-columns: repeat(3,1fr); gap: 5px;
+    }
+    .tone-btn {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 3px;
+      font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 500;
+      color: var(--muted); cursor: pointer; text-align: center;
+      transition: border-color .14s, color .14s, background .14s;
+    }
+    .tone-btn:hover { border-color: var(--indigo); color: var(--text); }
+    .tone-btn.active { background: var(--indigo); border-color: var(--indigo); color: #fff; }
+    .tone-emoji { display: block; font-size: 15px; margin-bottom: 2px; }
+
+    /* ── Generate button ─────────────────────────────────────────── */
+    .gen-btn {
+      width: 100%; background: var(--grad);
+      color: #fff; border: none; border-radius: 8px;
+      padding: 11px; cursor: pointer;
+      font-family: 'Syne', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: .02em;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      transition: opacity .18s, transform .1s;
+    }
+    .gen-btn:hover:not(:disabled) { opacity: .88; transform: translateY(-1px); }
+    .gen-btn:active:not(:disabled) { transform: translateY(0); }
+    .gen-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+    /* ── Loading ─────────────────────────────────────────────────── */
+    .loading {
+      display: flex; align-items: center; gap: 8px;
+      justify-content: center; color: var(--muted);
+      font-size: 12px; padding: 4px 0;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--blue);
+      border-radius: 50%;
+      animation: spin .65s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Draft card ──────────────────────────────────────────────── */
+    .draft-card {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 8px; overflow: hidden;
+    }
+    .draft-hdr {
+      display: flex; align-items: center;
+      justify-content: space-between;
+      padding: 7px 10px; background: var(--surf2);
+      border-bottom: 1px solid var(--border); gap: 8px;
+    }
+    .draft-badge {
+      font-size: 9px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--green);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .draft-badge::before {
+      content: ''; width: 6px; height: 6px;
+      background: var(--green); border-radius: 50%;
+      animation: glow 2s ease-in-out infinite;
+    }
+    @keyframes glow {
+      0%,100% { box-shadow: 0 0 5px rgba(34,197,94,.4); }
+      50%      { box-shadow: 0 0 10px rgba(34,197,94,.8); }
+    }
+    .draft-acts { display: flex; gap: 4px; flex-wrap: wrap; }
+    .dact {
+      border: none; border-radius: 5px;
+      padding: 4px 9px; font-size: 10px; font-weight: 600;
+      cursor: pointer; transition: opacity .14s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .dact:hover { opacity: .82; }
+    .dact-insert { background: var(--blue); color: #fff; }
+    .dact-regen  { background: var(--surf); color: var(--muted); border: 1px solid var(--border) !important; }
+    .dact-disc   { background: transparent; color: var(--muted2); border: 1px solid var(--border) !important; }
+    .draft-body {
+      padding: 11px 12px; font-size: 12px;
+      line-height: 1.65; color: #cdd0e8;
+      white-space: pre-wrap;
+      max-height: 200px; overflow-y: auto;
+    }
+    .draft-body::-webkit-scrollbar { width: 3px; }
+    .draft-body::-webkit-scrollbar-thumb { background: var(--border); }
+
+    /* ── Notices ─────────────────────────────────────────────────── */
+    .notice {
+      border-radius: 7px; padding: 9px 11px;
+      font-size: 11px; line-height: 1.5;
+    }
+    .notice-error {
+      background: rgba(239,68,68,.1);
+      border: 1px solid rgba(239,68,68,.28); color: #fca5a5;
+    }
+    .notice-success {
+      background: rgba(34,197,94,.1);
+      border: 1px solid rgba(34,197,94,.28); color: var(--green);
+      text-align: center; font-weight: 500;
+    }
+    .notice-off {
+      background: var(--surf2); border: 1px solid var(--border);
+      color: var(--muted); text-align: center; border-radius: 8px;
+      padding: 14px 12px; font-size: 12px; line-height: 1.6;
+    }
+    .notice-off strong { color: var(--text); }
+
+    /* ── API key section ─────────────────────────────────────────── */
+    .api-box {
+      background: var(--surf); border: 1px solid var(--border);
+      border-radius: 8px; padding: 11px 12px;
+    }
+    .api-title {
+      font-size: 11px; font-weight: 600; color: var(--text);
+      margin-bottom: 7px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .api-pill {
+      font-size: 9px; border-radius: 4px;
+      padding: 1px 5px; font-weight: 700; letter-spacing: .06em;
+    }
+    .api-pill.need { background: rgba(239,68,68,.18); color: #fca5a5; }
+    .api-pill.ok   { background: rgba(34,197,94,.15);  color: var(--green); }
+    .api-row { display: flex; gap: 5px; }
+    .api-inp {
+      flex: 1; background: var(--surf2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 9px;
+      font-size: 11px; font-family: 'Courier New', monospace;
+      color: var(--text); outline: none;
+      transition: border-color .18s;
+    }
+    .api-inp::placeholder { color: var(--muted2); }
+    .api-inp:focus { border-color: var(--indigo); }
+    .api-save {
+      background: var(--indigo); color: #fff;
+      border: none; border-radius: 6px;
+      padding: 7px 12px; font-size: 11px; font-weight: 600;
+      cursor: pointer; white-space: nowrap;
+      transition: opacity .15s;
+      font-family: 'DM Sans', sans-serif;
+    }
+    .api-save:hover { opacity: .85; }
+    .api-hint { font-size: 10px; color: var(--muted2); margin-top: 5px; }
+    .api-hint a { color: var(--indigo); opacity: .8; text-decoration: none; }
+    .api-hint a:hover { opacity: 1; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="hdr">
+  <div class="hdr-inner">
+    <div class="brand">
+      <div class="brand-ico">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.3">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          <path d="M8 10h8M8 14h5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">AI Reply</div>
+        <div class="brand-sub">Outlook Assistant</div>
+      </div>
+    </div>
+    <div class="tog-wrap">
+      <span class="tog-lbl" id="tog-lbl">ON</span>
+      <label class="tog">
+        <input type="checkbox" id="main-tog" checked/>
+        <span class="tog-track"></span>
+        <span class="tog-thumb"></span>
+      </label>
+    </div>
+  </div>
+</div>
+
+<!-- ── Body ── -->
+<div class="body" id="body">
+
+  <!-- API key (shown when missing) -->
+  <div id="api-box" class="api-box hidden">
+    <div class="api-title">
+      Anthropic API Key
+      <span class="api-pill need" id="api-pill">REQUIRED</span>
+    </div>
+    <div class="api-row">
+      <input type="password" class="api-inp" id="api-inp" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false"/>
+      <button class="api-save" id="api-save">Save</button>
+    </div>
+    <p class="api-hint">
+      Get a free key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+    </p>
+  </div>
+
+  <!-- Disabled state -->
+  <div id="notice-off" class="notice-off hidden">
+    <strong>AI Reply is paused</strong><br>
+    Flip the toggle above to re-enable.
+  </div>
+
+  <!-- Email preview -->
+  <div id="sec-email" class="hidden">
+    <div class="lbl">Replying to</div>
+    <div class="email-card">
+      <div class="email-from"  id="email-from">—</div>
+      <div class="email-subj"  id="email-subj"></div>
+      <div class="email-snippet" id="email-snip"></div>
+    </div>
+  </div>
+
+  <!-- Tone picker -->
+  <div id="sec-tone" class="hidden">
+    <div class="lbl">Reply tone</div>
+    <div class="tone-grid">
+      <button class="tone-btn active" data-tone="professional"><span class="tone-emoji">💼</span>Professional</button>
+      <button class="tone-btn"        data-tone="friendly">    <span class="tone-emoji">😊</span>Friendly</button>
+      <button class="tone-btn"        data-tone="concise">     <span class="tone-emoji">⚡</span>Concise</button>
+      <button class="tone-btn"        data-tone="formal">      <span class="tone-emoji">🎩</span>Formal</button>
+      <button class="tone-btn"        data-tone="empathetic">  <span class="tone-emoji">🤝</span>Empathetic</button>
+      <button class="tone-btn"        data-tone="assertive">   <span class="tone-emoji">🎯</span>Assertive</button>
+    </div>
+  </div>
+
+  <!-- Generate -->
+  <div id="sec-gen" class="hidden">
+    <button class="gen-btn" id="gen-btn">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+      </svg>
+      Generate Draft Reply
+    </button>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading" class="loading hidden">
+    <div class="spinner"></div>
+    <span>Drafting your reply…</span>
+  </div>
+
+  <!-- Error -->
+  <div id="error" class="notice notice-error hidden"></div>
+
+  <!-- Success flash -->
+  <div id="success" class="notice notice-success hidden">
+    ✓ Draft inserted — review it, then send when you're ready.
+  </div>
+
+  <!-- Draft card -->
+  <div id="draft-card" class="draft-card hidden">
+    <div class="draft-hdr">
+      <span class="draft-badge">Draft ready</span>
+      <div class="draft-acts">
+        <button class="dact dact-insert" id="btn-insert">↳ Insert into Reply</button>
+        <button class="dact dact-regen"  id="btn-regen" >↺ Redo</button>
+        <button class="dact dact-disc"   id="btn-disc"  >✕</button>
+      </div>
+    </div>
+    <div class="draft-body" id="draft-body"></div>
+  </div>
+
+</div><!-- /body -->
+
+<script src="taskpane.js"></script>
+</body>
+</html>
